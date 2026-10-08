@@ -1,0 +1,21 @@
+{
+  "sample_start": "2021-01-01 00:00:00",
+  "sample_end": "2026-10-08 23:30:00",
+  "complete_days": 2066,
+  "half_hours": 99168,
+  "window": 365,
+  "alpha": 0.0022695105366946685,
+  "static_tsi": {
+    "revar": 57.87,
+    "recov_pos": 73.49,
+    "recov_neg": 71.56
+  },
+  "regime_tsi": {
+    "2021 water crisis": 46.47,
+    "2022-2023 surplus": 63.05,
+    "2024-2026 segmentation": 58.73
+  },
+  "rolling_tsi_last": 68.69,
+  "rolling_tsi_min": 44.11,
+  "rolling_tsi_max": 69.77
+}

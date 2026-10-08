@@ -1,0 +1,11 @@
+data/*
+!data/.gitkeep
+__pycache__/
+*.py[cod]
+.venv/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.DS_Store
+*.egg-info/
+dist/
