@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """End-to-end run: download ONS data, estimate connectedness, write results and figures.
 
-python scripts/run_analysis.py --years 2021 2026 --window 365 --jobs 8
+python scripts/run_analysis.py --years 2021 2026 --end 2026-10-08 --window 365 --jobs 8
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 import pandas as pd
-from connectedness import MHARConfig, SpilloverPipeline
+from connectedness import MHARConfig
 
 from pororoca import (
     annual_summary,
@@ -19,6 +19,7 @@ from pororoca import (
     load_cmo,
     pairwise_matrix,
     price_separation,
+    realized_measure,
     rolling_directional,
     static_table,
     subperiod_tables,
@@ -33,6 +34,7 @@ MEASURES = ("revar", "recov_pos", "recov_neg")
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--years", nargs=2, type=int, default=[2021, 2026], metavar=("FROM", "TO"))
+    ap.add_argument("--end", help="last day of the sample (YYYY-MM-DD); default: all data")
     ap.add_argument("--window", type=int, default=365, help="rolling window in days")
     ap.add_argument("--jobs", type=int, default=8, help="parallel windows")
     ap.add_argument("--data", type=Path, default=ROOT / "data")
@@ -41,12 +43,15 @@ def main() -> None:
     args = ap.parse_args()
 
     args.results.mkdir(parents=True, exist_ok=True)
-    cfg = MHARConfig(fast=True)
+    # `MHARConfig(fast=True)` only sets the flag; the fast preset is the classmethod.
+    cfg = MHARConfig.fast_preset()
 
     # ---------------------------------------------------------------- data
     print("[1/6] downloading CMO semi-horario from ONS ...")
     long_df = load_cmo(range(args.years[0], args.years[1] + 1), cache_dir=args.data)
     panel = build_panel(long_df)
+    if args.end:
+        panel = panel.loc[: args.end]
     panel.to_parquet(args.data / "panel_cmo.parquet")
     days = panel.index.normalize().nunique()
     print(
@@ -83,14 +88,7 @@ def main() -> None:
 
     # ------------------------------------------------ rolling, directional
     print(f"[5/6] rolling directional connectedness, window={args.window} ...")
-    prepared = (
-        SpilloverPipeline(panel, measures=("revar",), config=cfg)
-        .compute_returns()
-        .compute_realized_measures()
-        .force_pit()
-        .run()
-    )
-    revar = prepared.transformed["revar"]
+    revar = realized_measure(panel, "revar")
     roll = rolling_directional(revar, window=args.window, config=cfg, n_jobs=args.jobs)
     roll.tsi.round(3).to_csv(args.results / "rolling_tsi.csv")
     roll.net.round(3).to_csv(args.results / "rolling_net.csv")

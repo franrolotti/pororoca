@@ -5,7 +5,13 @@ from __future__ import annotations
 import itertools
 
 import pandas as pd
-from connectedness import MHARConfig, SpilloverPipeline, SpilloverResult
+from connectedness import (
+    MHARConfig,
+    SpilloverResult,
+    compute_realized_measures,
+    pit_transform,
+    static_spillover,
+)
 
 from .data import SUBMARKETS
 
@@ -19,6 +25,31 @@ REGIMES: dict[str, tuple[str, str]] = {
 }
 
 
+def intraday_returns(panel: pd.DataFrame, *, step: str = "30min") -> pd.DataFrame:
+    """Half-hourly price changes that never span a gap in the panel.
+
+    ``connectedness.simple_returns`` differences the whole panel, so once
+    incomplete days are dropped the first change after a gap is taken against a
+    price several days earlier and lands, as one jump, in a single day's realized
+    measure. Here a change is kept only when the previous observation is exactly
+    one ``step`` earlier. The 23:30 -> 00:00 change between consecutive days is
+    kept: the market runs continuously and it belongs to the new day, as upstream.
+
+    Returns the frame ``connectedness.compute_realized_measures`` expects: one
+    column per market plus a ``"date"`` column.
+    """
+    contiguous = panel.index.to_series().diff() == pd.Timedelta(step)
+    rets = panel.diff()[contiguous.to_numpy()]
+    rets["date"] = rets.index.normalize()
+    return rets
+
+
+def realized_measure(panel: pd.DataFrame, measure: str = "revar") -> pd.DataFrame:
+    """Daily realized measure, PIT-transformed column by column (``force_pit`` upstream)."""
+    measures = compute_realized_measures(intraday_returns(panel))
+    return pit_transform(getattr(measures, measure))
+
+
 def static_table(
     panel: pd.DataFrame,
     measure: str = "revar",
@@ -26,15 +57,7 @@ def static_table(
     config: MHARConfig | None = None,
 ) -> SpilloverResult:
     """Full-sample Diebold-Yilmaz table for one realized measure."""
-    result = (
-        SpilloverPipeline(panel, measures=(measure,), config=config or MHARConfig(fast=True))
-        .compute_returns()
-        .compute_realized_measures()
-        .force_pit()
-        .fit_static()
-        .run()
-    )
-    return result.static[measure]
+    return static_spillover(realized_measure(panel, measure), config or MHARConfig.fast_preset())
 
 
 def subperiod_tables(
